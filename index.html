@@ -224,10 +224,10 @@ const CONFIG = {
   school: "Homestead High School",
   city: "Fort Wayne, IN",
   district: "SACS",                  // who runs the background check
-  scriptUrl: "https://script.google.com/macros/s/AKfycbx14ONv4qE1NUuzi7x9aQ8cK8DdQQ5KWHMKhSECj1z8NpLNCnzz0rYiLBHGD3T1a1w56Q/exec" // Apps Script web app URL (see README)
+  notifyEmail: "camelder0@gmail.com" // where applications are emailed (via formsubmit.co, see README)
 };
 // ==========================================
-const SCRIPT_URL = CONFIG.scriptUrl;
+const SEND_URL = CONFIG.notifyEmail ? "https://formsubmit.co/ajax/" + CONFIG.notifyEmail : "";
 document.querySelectorAll("[data-c]").forEach(el => { const v = CONFIG[el.dataset.c]; if (v) el.textContent = v; });
 document.title = "Mentor with " + CONFIG.team;
 
@@ -252,14 +252,26 @@ form.addEventListener("submit", async (e) => {
     form.email.focus();
     return;
   }
-  if (!SCRIPT_URL) {
+  if (!SEND_URL) {
     setStatus("This form isn't connected yet. Email the team directly for now.", "err");
     return;
   }
   btn.disabled = true;
   setStatus("Sending…");
+  // Bots fill the hidden "website" field; act like it worked and send nothing.
+  const bot = form.website.value !== "";
+  // One entry per question; checkbox groups are joined into one line.
+  const data = {};
+  for (const [k, v] of new FormData(form)) if (k !== "website") data[k] = data[k] ? data[k] + ", " + v : v;
+  data._subject = "New " + CONFIG.team + " mentor application: " + data.name;
+  data._replyto = data.email;
+  data._template = "table";
   try {
-    await fetch(SCRIPT_URL, { method: "POST", mode: "no-cors", body: new URLSearchParams(new FormData(form)) });
+    if (!bot) {
+      const res = await fetch(SEND_URL, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(data) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok || String(out.success) !== "true") throw new Error(out.message || res.status);
+    }
     form.hidden = true;
     document.getElementById("intro").hidden = true;
     document.getElementById("done").hidden = false;
